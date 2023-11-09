@@ -74,9 +74,10 @@
 //! management. If you have questions, the comments in the code should guide you, but this overview should give
 //! you a head start
 
-#![deny(missing_docs)]
+#![allow(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+mod benchmarking;
 #[cfg(test)]
 mod mock;
 #[cfg(test)]
@@ -101,8 +102,9 @@ use sp_std::prelude::*;
 pub mod pallet {
     use super::*;
     use crate::types::{ArtistAliasOf, UpdatableData};
-    use crate::Event::ArtistUnregistered;
+    use crate::Event::{ArtistUnregistered, ArtistUpdated};
     use frame_support::pallet_prelude::*;
+    use frame_support::traits::fungible::Mutate;
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
@@ -113,8 +115,12 @@ pub mod pallet {
         /// The overarching event type.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
+        #[cfg(not(feature = "runtime-benchmarks"))]
         /// The way to handle the storage deposit cost of Artist creation
         type Currency: ReservableCurrency<Self::AccountId>;
+
+        #[cfg(feature = "runtime-benchmarks")]
+        type Currency: Mutate<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 
         /// The base deposit for registering as an artist on chain.
         type BaseDeposit: Get<BalanceOf<Self>>;
@@ -158,13 +164,20 @@ pub mod pallet {
         /// A new artist got registered.
         ArtistRegistered {
             /// The address of the new artist.
-            owner: T::AccountId,
+            id: T::AccountId,
             /// main name of the new artist.
             name: BoundedVec<u8, T::MaxNameLen>,
         },
 
         /// An Artist as been unregistered
-        ArtistUnregistered { owner: T::AccountId },
+        ArtistUnregistered { id: T::AccountId },
+
+        ArtistUpdated {
+            /// The address of the updated artist.
+            id: T::AccountId,
+            /// The new data.
+            new_data: UpdatableData<ArtistAliasOf<T>>,
+        },
     }
 
     #[pallet::error]
@@ -226,7 +239,7 @@ pub mod pallet {
 
             ArtistOf::insert(origin.clone(), new_artist);
             Self::deposit_event(ArtistRegistered {
-                owner: origin,
+                id: origin,
                 name: main_name,
             });
             Ok(().into())
@@ -243,7 +256,7 @@ pub mod pallet {
             T::Currency::unreserve(&origin, T::BaseDeposit::get());
             ArtistOf::<T>::remove(origin.clone());
 
-            Self::deposit_event(ArtistUnregistered { owner: origin });
+            Self::deposit_event(ArtistUnregistered { id: origin });
             Ok(().into())
         }
 
@@ -254,9 +267,14 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let origin = ensure_signed(origin)?;
 
-            ArtistOf::<T>::try_mutate(origin, |maybe_artist| {
+            ArtistOf::<T>::try_mutate(origin.clone(), |maybe_artist| {
                 if let Some(artist) = maybe_artist {
-                    artist.update(data)
+                    artist.update(data.clone())?;
+                    Self::deposit_event(ArtistUpdated {
+                        id: origin,
+                        new_data: data,
+                    });
+                    Ok(().into())
                 } else {
                     return Err(Error::<T>::NotRegistered.into());
                 }
