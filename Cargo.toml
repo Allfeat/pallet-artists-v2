@@ -8,6 +8,10 @@ homepage = "https://allfeat.network"
 description = "FRAME artists management pallet for the Allfeat chain"
 readme = "README.md"
 
+# faster compilation
+[build]
+rustflags = ["-Z", "threads=8"]
+
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
