@@ -26,6 +26,7 @@ use frame_benchmarking::v2::*;
 use frame_support::dispatch::RawOrigin;
 use frame_support::traits::fungible::Inspect;
 use frame_support::traits::fungible::Mutate;
+use frame_system::Pallet as System;
 use genres_registry::ElectronicSubtype;
 use genres_registry::MusicGenre::Electronic;
 use sp_runtime::bounded_vec;
@@ -76,6 +77,29 @@ fn dumb_assets_with_capacity<T: Config>(capacity: u32) -> BoundedVec<Vec<u8>, T:
     b_vec
 }
 
+fn register_test_artist<T: Config>(
+    id: T::AccountId,
+    name_length: u32,
+    genres_count: u32,
+    assets_count: u32,
+) {
+    let name: BoundedVec<u8, T::MaxNameLen> = dumb_name_with_capacity::<T>(name_length);
+    let alias: BoundedVec<u8, T::MaxNameLen> = dumb_name_with_capacity::<T>(name_length);
+    let genres: BoundedVec<MusicGenre, T::MaxGenres> = dumb_genres_with_capacity::<T>(genres_count);
+    let description = Some(String::from("test").as_bytes().to_vec());
+    let assets: BoundedVec<Vec<u8>, T::MaxAssets> = dumb_assets_with_capacity::<T>(assets_count);
+
+    Artists::<T>::register(
+        RawOrigin::Signed(id).into(),
+        name,
+        Some(alias),
+        genres,
+        description,
+        assets,
+    )
+    .expect("benchmark test should not fail");
+}
+
 #[benchmarks]
 mod benchmarks {
     use super::*;
@@ -89,7 +113,7 @@ mod benchmarks {
         let caller: T::AccountId = whitelisted_caller();
 
         T::Currency::set_balance(
-            &caller.clone(),
+            &caller,
             T::Currency::minimum_balance().saturating_add(100u32.into()),
         );
 
@@ -110,6 +134,33 @@ mod benchmarks {
         );
 
         assert_last_event::<T>(Event::ArtistRegistered { id: caller, name }.into());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn unregister(
+        n: Linear<1, { T::MaxNameLen::get() }>,
+        g: Linear<0, { T::MaxGenres::get() }>,
+        a: Linear<0, { T::MaxAssets::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), n, g, a);
+
+        System::<T>::set_block_number(
+            System::<T>::block_number().saturating_add(T::UnregisterPeriod::get().into()),
+        );
+
+        #[extrinsic_call]
+        _(RawOrigin::Signed(caller.clone().into()));
+
+        assert_last_event::<T>(Event::ArtistUnregistered { id: caller }.into());
 
         Ok(())
     }
