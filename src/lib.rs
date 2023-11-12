@@ -84,6 +84,7 @@ mod mock;
 mod tests;
 mod types;
 
+use frame_support::dispatch::DispatchErrorWithPostInfo;
 use frame_support::pallet_prelude::{DispatchResultWithPostInfo, Get};
 use frame_support::BoundedVec;
 use genres_registry::MusicGenre;
@@ -184,6 +185,8 @@ pub mod pallet {
     pub enum Error<T> {
         /// A genre appear multiple time in the artist data.
         NotUniqueGenre,
+        /// An asset appear multiple time in the artist data.
+        NotUniqueAsset,
         /// The artist name is already attributed to a verified artist.
         NameUnavailable,
         /// Account isn't registered as an Artist.
@@ -232,7 +235,7 @@ pub mod pallet {
                     Some(desc) => Some(T::Hashing::hash(&desc)),
                     None => None,
                 },
-                Self::hash_assets(assets),
+                Self::checked_hash_assets(assets)?,
                 Default::default(),
             );
             new_artist.set_checked_genres(genres)?;
@@ -287,17 +290,24 @@ impl<T> Pallet<T>
 where
     T: frame_system::Config + Config,
 {
-    /// Hash a collection of raw assets.
-    fn hash_assets(
+    /// Hash a collection of raw assets while checking for non-unique assets.
+    fn checked_hash_assets(
         raw_assets: BoundedVec<Vec<u8>, T::MaxAssets>,
-    ) -> BoundedVec<T::Hash, T::MaxAssets> {
+    ) -> Result<BoundedVec<T::Hash, T::MaxAssets>, DispatchErrorWithPostInfo> {
         let mut hashed: BoundedVec<T::Hash, T::MaxAssets> = Default::default();
 
         raw_assets
             .iter()
-            .for_each(|asset| hashed.try_push(T::Hashing::hash(asset)).unwrap());
+            .try_for_each(|asset| -> Result<(), DispatchErrorWithPostInfo> {
+                let hash = T::Hashing::hash(asset);
+                if hashed.contains(&hash) {
+                    return Err(Error::<T>::NotUniqueAsset.into());
+                }
+                hashed.try_push(hash).expect("already bounded");
+                Ok(())
+            })?;
 
-        hashed
+        Ok(hashed)
     }
 
     /// Return if the actual account ID can unregister from being an Artist.

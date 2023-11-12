@@ -85,7 +85,7 @@ where
     /// Digital assets (such as photos, profile pictures, banners, videos, etc.)
     /// that officially represent the artist. These fingerprints allow for the
     /// verification of the authenticity of these assets.
-    pub(crate) assets: BoundedVec<T::Hash, T::MaxAssets>,
+    assets: BoundedVec<T::Hash, T::MaxAssets>,
     // Linked chain logic data
     /// Associated smart-contracts deployed by dApps for the artist (e.g: royalties contracts)
     contracts: BoundedVec<AccountIdOf<T>, T::MaxContracts>,
@@ -155,7 +155,7 @@ where
             UpdatableData::Genres(UpdatableDataVec::Remove(x)) => return self.remove_genre(x),
             UpdatableData::Genres(UpdatableDataVec::Clear) => self.genres = Default::default(),
             UpdatableData::Description(x) => self.set_description(x),
-            UpdatableData::Assets(UpdatableDataVec::Add(x)) => return self.add_asset(&x),
+            UpdatableData::Assets(UpdatableDataVec::Add(x)) => return self.add_checked_asset(&x),
             UpdatableData::Assets(UpdatableDataVec::Remove(x)) => return self.remove_asset(&x),
             UpdatableData::Assets(UpdatableDataVec::Clear) => self.assets = Default::default(),
         }
@@ -178,10 +178,17 @@ where
         }
     }
 
-    fn add_asset(&mut self, asset: &Vec<u8>) -> DispatchResultWithPostInfo {
+    fn add_checked_asset(&mut self, asset: &Vec<u8>) -> DispatchResultWithPostInfo {
         let hash = T::Hashing::hash(asset);
-        self.assets.try_push(hash).map_err(|_| Error::<T>::Full)?;
-        Ok(().into())
+
+        match self.assets.contains(&hash) {
+            false => {
+                self.assets.try_push(hash).map_err(|_| Error::<T>::Full)?;
+
+                Ok(().into())
+            }
+            true => Err(Error::<T>::NotUniqueAsset.into()),
+        }
     }
 
     fn remove_asset(&mut self, asset: &Vec<u8>) -> DispatchResultWithPostInfo {

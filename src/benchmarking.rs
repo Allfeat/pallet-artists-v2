@@ -22,6 +22,7 @@
 use super::*;
 use crate::Pallet as Artists;
 
+use crate::types::ArtistAliasOf;
 use frame_benchmarking::v2::*;
 use frame_support::dispatch::RawOrigin;
 use frame_support::traits::fungible::Inspect;
@@ -36,7 +37,7 @@ fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
-fn dumb_name_with_capacity<T: Config>(capacity: u32) -> BoundedVec<u8, T::MaxNameLen> {
+fn dumb_name_with_capacity<T: Config>(capacity: u32) -> ArtistAliasOf<T> {
     let vec = (0..capacity)
         .map(|_| "X")
         .collect::<String>()
@@ -56,7 +57,7 @@ fn dumb_genres_with_capacity<T: Config>(capacity: u32) -> BoundedVec<MusicGenre,
 
     if capacity < T::MaxGenres::get() {
         let mut i = capacity;
-        while i <= T::MaxGenres::get() {
+        while i < T::MaxGenres::get() {
             b_vec.pop();
             i += 1;
         }
@@ -68,10 +69,9 @@ fn dumb_genres_with_capacity<T: Config>(capacity: u32) -> BoundedVec<MusicGenre,
 fn dumb_assets_with_capacity<T: Config>(capacity: u32) -> BoundedVec<Vec<u8>, T::MaxAssets> {
     let mut b_vec: BoundedVec<Vec<u8>, T::MaxAssets> = bounded_vec!();
 
-    for _ in 0..capacity {
-        b_vec
-            .try_push(String::from("assets").as_bytes().to_vec())
-            .unwrap();
+    for i in 0..capacity {
+        let asset = format!("asset{}", i);
+        b_vec.try_push(asset.as_bytes().to_vec()).unwrap();
     }
 
     b_vec
@@ -83,8 +83,8 @@ fn register_test_artist<T: Config>(
     genres_count: u32,
     assets_count: u32,
 ) {
-    let name: BoundedVec<u8, T::MaxNameLen> = dumb_name_with_capacity::<T>(name_length);
-    let alias: BoundedVec<u8, T::MaxNameLen> = dumb_name_with_capacity::<T>(name_length);
+    let name: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(name_length);
+    let alias: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(name_length);
     let genres: BoundedVec<MusicGenre, T::MaxGenres> = dumb_genres_with_capacity::<T>(genres_count);
     let description = Some(String::from("test").as_bytes().to_vec());
     let assets: BoundedVec<Vec<u8>, T::MaxAssets> = dumb_assets_with_capacity::<T>(assets_count);
@@ -103,6 +103,8 @@ fn register_test_artist<T: Config>(
 #[benchmarks]
 mod benchmarks {
     use super::*;
+    use crate::types::{UpdatableData, UpdatableDataVec};
+    use genres_registry::ClassicalSubtype;
 
     #[benchmark]
     fn register(
@@ -117,8 +119,8 @@ mod benchmarks {
             T::Currency::minimum_balance().saturating_add(100u32.into()),
         );
 
-        let name: BoundedVec<u8, T::MaxNameLen> = dumb_name_with_capacity::<T>(n);
-        let alias: BoundedVec<u8, T::MaxNameLen> = dumb_name_with_capacity::<T>(n);
+        let name: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
+        let alias: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
         let genres: BoundedVec<MusicGenre, T::MaxGenres> = dumb_genres_with_capacity::<T>(g);
         let description = Some(String::from("test").as_bytes().to_vec());
         let assets: BoundedVec<Vec<u8>, T::MaxAssets> = dumb_assets_with_capacity::<T>(a);
@@ -161,6 +163,250 @@ mod benchmarks {
         _(RawOrigin::Signed(caller.clone().into()));
 
         assert_last_event::<T>(Event::ArtistUnregistered { id: caller }.into());
+
+        Ok(())
+    }
+
+    /// `n` is the existing artist data and `x` is the new data to update with.
+    #[benchmark]
+    fn update_alias(
+        n: Linear<1, { T::MaxNameLen::get() }>,
+        x: Linear<1, { T::MaxNameLen::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), n, 0, 0);
+
+        let new_data =
+            UpdatableData::<ArtistAliasOf<T>>::Alias(Some(dumb_name_with_capacity::<T>(x)));
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
+
+        Ok(())
+    }
+
+    /// `n` is the existing artist data.
+    #[benchmark]
+    fn update_add_genres(
+        n: Linear<0, { T::MaxGenres::get().saturating_sub(1) }>,
+    ) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), 1, n, 0);
+
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableDataVec::Add(
+            MusicGenre::Classical(Some(ClassicalSubtype::Symphony)),
+        ));
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
+
+        Ok(())
+    }
+
+    /// `n` is the existing artist data.
+    #[benchmark]
+    fn update_remove_genres(n: Linear<1, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), 1, n, 0);
+
+        // Always remove what we are sure this is the first element so there is always something
+        // to remove even with only one genre existing in the benchmarking artist.
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableDataVec::Remove(
+            Electronic(Some(ElectronicSubtype::House)),
+        ));
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
+
+        Ok(())
+    }
+
+    /// `n` is the existing artist data.
+    #[benchmark]
+    fn update_clear_genres(n: Linear<0, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), 1, n, 0);
+
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableDataVec::Clear);
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
+
+        Ok(())
+    }
+
+    /// Description is a hashed data so the length is fixed, we don't need to benchmark multiple lengths.
+    #[benchmark]
+    fn update_description() -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), 1, 0, 0);
+
+        let new_data =
+            UpdatableData::<ArtistAliasOf<T>>::Description(Some(b"new_description".to_vec()));
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
+
+        Ok(())
+    }
+
+    /// `n` is the existing artist data.
+    #[benchmark]
+    fn update_add_assets(
+        n: Linear<0, { T::MaxAssets::get().saturating_sub(1) }>,
+    ) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), 1, 0, n);
+
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableDataVec::Add(
+            b"test asset".to_vec(),
+        ));
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
+
+        Ok(())
+    }
+
+    /// `n` is the existing artist data.
+    #[benchmark]
+    fn update_remove_assets(n: Linear<1, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), 1, 0, n);
+
+        // Always remove what we are sure this is the first element so there is always something
+        // to remove even with only one genre existing in the benchmarking artist.
+        let new_data =
+            UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableDataVec::Remove(b"asset0".to_vec()));
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
+
+        Ok(())
+    }
+
+    /// `n` is the existing artist data.
+    #[benchmark]
+    fn update_clear_assets(n: Linear<0, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(
+            &caller,
+            T::Currency::minimum_balance().saturating_add(100u32.into()),
+        );
+
+        register_test_artist::<T>(caller.clone(), 1, 0, n);
+
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableDataVec::Clear);
+
+        #[extrinsic_call]
+        update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
+
+        assert_last_event::<T>(
+            Event::ArtistUpdated {
+                id: caller,
+                new_data,
+            }
+            .into(),
+        );
 
         Ok(())
     }
