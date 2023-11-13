@@ -94,7 +94,6 @@ use crate::types::BalanceOf;
 use crate::types::{ArtistAliasOf, UpdatableData};
 use crate::Event::ArtistRegistered;
 use crate::Event::{ArtistUnregistered, ArtistUpdated};
-use frame_support::traits::fungible::Mutate;
 use frame_support::traits::ReservableCurrency;
 use sp_runtime::traits::Hash;
 use sp_runtime::SaturatedConversion;
@@ -117,12 +116,8 @@ pub mod pallet {
         /// The overarching event type.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        #[cfg(not(feature = "runtime-benchmarks"))]
         /// The way to handle the storage deposit cost of Artist creation
         type Currency: ReservableCurrency<Self::AccountId>;
-
-        #[cfg(feature = "runtime-benchmarks")]
-        type Currency: Mutate<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 
         /// The base deposit for registering as an artist on chain.
         type BaseDeposit: Get<BalanceOf<Self>>;

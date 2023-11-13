@@ -23,14 +23,14 @@ use super::*;
 use crate::Pallet as Artists;
 
 use crate::types::ArtistAliasOf;
+use codec::alloc::string::ToString;
 use frame_benchmarking::v2::*;
 use frame_support::dispatch::RawOrigin;
-use frame_support::testing_prelude::bounded_vec;
-use frame_support::traits::fungible::Inspect;
-use frame_support::traits::fungible::Mutate;
+use frame_support::traits::Currency;
 use frame_system::Pallet as System;
 use genres_registry::ElectronicSubtype;
 use genres_registry::MusicGenre::Electronic;
+use sp_runtime::traits::Bounded;
 use sp_runtime::Saturating;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
@@ -38,22 +38,20 @@ fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
 }
 
 fn dumb_name_with_capacity<T: Config>(capacity: u32) -> ArtistAliasOf<T> {
-    let vec = (0..capacity)
-        .map(|_| "X")
-        .collect::<String>()
-        .as_bytes()
-        .to_vec();
+    let vec: Vec<u8> = sp_std::iter::repeat(b'X').take(capacity as usize).collect();
     vec.try_into().unwrap()
 }
 
 fn dumb_genres_with_capacity<T: Config>(capacity: u32) -> BoundedVec<MusicGenre, T::MaxGenres> {
-    let mut b_vec: BoundedVec<MusicGenre, T::MaxGenres> = bounded_vec!(
+    let mut b_vec: BoundedVec<MusicGenre, T::MaxGenres> = vec![
         Electronic(Some(ElectronicSubtype::House)),
         Electronic(Some(ElectronicSubtype::Ambient)),
         Electronic(Some(ElectronicSubtype::Techno)),
         Electronic(Some(ElectronicSubtype::Trance)),
-        Electronic(Some(ElectronicSubtype::DrumNBass))
-    );
+        Electronic(Some(ElectronicSubtype::DrumNBass)),
+    ]
+    .try_into()
+    .expect("benchmarking bounded vec");
 
     if capacity < T::MaxGenres::get() {
         let mut i = capacity;
@@ -67,11 +65,13 @@ fn dumb_genres_with_capacity<T: Config>(capacity: u32) -> BoundedVec<MusicGenre,
 }
 
 fn dumb_assets_with_capacity<T: Config>(capacity: u32) -> BoundedVec<Vec<u8>, T::MaxAssets> {
-    let mut b_vec: BoundedVec<Vec<u8>, T::MaxAssets> = bounded_vec!();
+    let mut b_vec: BoundedVec<Vec<u8>, T::MaxAssets> = Default::default();
 
     for i in 0..capacity {
-        let asset = format!("asset{}", i);
-        b_vec.try_push(asset.as_bytes().to_vec()).unwrap();
+        let mut buffer = Vec::new();
+        buffer.extend_from_slice("asset".as_bytes());
+        buffer.extend_from_slice(i.to_string().as_bytes());
+        b_vec.try_push(buffer).unwrap();
     }
 
     b_vec
@@ -86,7 +86,7 @@ fn register_test_artist<T: Config>(
     let name: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(name_length);
     let alias: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(name_length);
     let genres: BoundedVec<MusicGenre, T::MaxGenres> = dumb_genres_with_capacity::<T>(genres_count);
-    let description = Some(String::from("test").as_bytes().to_vec());
+    let description = Some("test".as_bytes().to_vec());
     let assets: BoundedVec<Vec<u8>, T::MaxAssets> = dumb_assets_with_capacity::<T>(assets_count);
 
     Artists::<T>::register(
@@ -114,15 +114,12 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         let name: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
         let alias: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
         let genres: BoundedVec<MusicGenre, T::MaxGenres> = dumb_genres_with_capacity::<T>(g);
-        let description = Some(String::from("test").as_bytes().to_vec());
+        let description = Some("test".as_bytes().to_vec());
         let assets: BoundedVec<Vec<u8>, T::MaxAssets> = dumb_assets_with_capacity::<T>(a);
 
         #[extrinsic_call]
@@ -148,10 +145,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), n, g, a);
 
@@ -175,10 +169,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), n, 0, 0);
 
@@ -206,10 +197,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -236,10 +224,7 @@ mod benchmarks {
     fn update_remove_genres(n: Linear<1, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -268,10 +253,7 @@ mod benchmarks {
     fn update_clear_genres(n: Linear<0, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -296,10 +278,7 @@ mod benchmarks {
     fn update_description() -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), 1, 0, 0);
 
@@ -327,10 +306,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
@@ -357,10 +333,7 @@ mod benchmarks {
     fn update_remove_assets(n: Linear<1, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
@@ -388,10 +361,7 @@ mod benchmarks {
     fn update_clear_assets(n: Linear<0, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(
-            &caller,
-            T::Currency::minimum_balance().saturating_add(100u32.into()),
-        );
+        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
