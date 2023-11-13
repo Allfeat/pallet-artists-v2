@@ -27,15 +27,15 @@ codec = { package = "parity-scale-codec", version = "3.6.1", default-features = 
 scale-info = { version = "2.5.0", default-features = false, features = [
     "derive",
 ] }
-sp-io = { version = "23.0.0", git = "https://github.com/paritytech/polkadot-sdk.git", branch = "release-polkadot-v1.1.0" }
 sp-runtime = { version = "24.0.0", default-features = false, git = "https://github.com/paritytech/polkadot-sdk.git", branch = "release-polkadot-v1.1.0" }
 sp-std = { version = "8.0.0", default-features = false, git = "https://github.com/paritytech/polkadot-sdk.git", branch = "release-polkadot-v1.1.0" }
 frame-benchmarking = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/polkadot-sdk.git", branch = "release-polkadot-v1.1.0", optional = true }
 
-genres-registry = { version = "1.0.0-dev", git = "https://github.com/Allfeat/genres-registry.git", branch = "master" }
+genres-registry = { version = "1.0.0-dev", default-features = false, git = "https://github.com/Allfeat/genres-registry.git", branch = "master" }
 
 [dev-dependencies]
 pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/polkadot-sdk.git", branch = "release-polkadot-v1.1.0" }
+sp-io = { version = "23.0.0", default-features = false, git = "https://github.com/paritytech/polkadot-sdk.git", branch = "release-polkadot-v1.1.0" }
 
 [features]
 default = ["std"]
@@ -44,6 +44,9 @@ std = [
     "scale-info/std",
     "sp-std/std",
     "sp-runtime/std",
+    "sp-io/std",
+    "log/std",
+    "genres-registry/std",
     "pallet-balances/std",
     "frame-support/std",
     "frame-system/std",

@@ -91,21 +91,22 @@ use genres_registry::MusicGenre;
 pub use types::Artist;
 
 use crate::types::BalanceOf;
+use crate::types::{ArtistAliasOf, UpdatableData};
 use crate::Event::ArtistRegistered;
+use crate::Event::{ArtistUnregistered, ArtistUpdated};
+use frame_support::traits::fungible::Mutate;
 use frame_support::traits::ReservableCurrency;
-pub use pallet::*;
 use sp_runtime::traits::Hash;
 use sp_runtime::SaturatedConversion;
 use sp_std::prelude::*;
+
+pub use pallet::*;
 
 /// Artists Pallet
 #[frame_support::pallet(dev_mode)]
 pub mod pallet {
     use super::*;
-    use crate::types::{ArtistAliasOf, UpdatableData};
-    use crate::Event::{ArtistUnregistered, ArtistUpdated};
     use frame_support::pallet_prelude::*;
-    use frame_support::traits::fungible::Mutate;
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]

@@ -25,12 +25,12 @@ use crate::Pallet as Artists;
 use crate::types::ArtistAliasOf;
 use frame_benchmarking::v2::*;
 use frame_support::dispatch::RawOrigin;
+use frame_support::testing_prelude::bounded_vec;
 use frame_support::traits::fungible::Inspect;
 use frame_support::traits::fungible::Mutate;
 use frame_system::Pallet as System;
 use genres_registry::ElectronicSubtype;
 use genres_registry::MusicGenre::Electronic;
-use sp_runtime::bounded_vec;
 use sp_runtime::Saturating;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
