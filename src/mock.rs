@@ -88,6 +88,7 @@ impl Config for Test {
     type MaxGenres = ConstU32<5>;
     type MaxAssets = ConstU32<32>;
     type MaxContracts = ConstU32<2048>;
+    type WeightInfo = ();
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

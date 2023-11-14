@@ -83,15 +83,18 @@ mod mock;
 #[cfg(test)]
 mod tests;
 mod types;
+pub mod weights;
+
+use weights::WeightInfo;
 
 use frame_support::dispatch::DispatchErrorWithPostInfo;
-use frame_support::pallet_prelude::{DispatchResultWithPostInfo, Get};
+use frame_support::pallet_prelude::{DispatchResultWithPostInfo, Get, Weight};
 use frame_support::BoundedVec;
 use genres_registry::MusicGenre;
 pub use types::Artist;
 
-use crate::types::BalanceOf;
 use crate::types::{ArtistAliasOf, UpdatableData};
+use crate::types::{BalanceOf, UpdatableDataVec};
 use crate::Event::ArtistRegistered;
 use crate::Event::{ArtistUnregistered, ArtistUpdated};
 use frame_support::traits::ReservableCurrency;
@@ -102,7 +105,7 @@ use sp_std::prelude::*;
 pub use pallet::*;
 
 /// Artists Pallet
-#[frame_support::pallet(dev_mode)]
+#[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use frame_support::pallet_prelude::*;
@@ -144,6 +147,9 @@ pub mod pallet {
         /// The maximum amount of contracts that an artist can have.
         #[pallet::constant]
         type MaxContracts: Get<u32>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::storage]
@@ -202,6 +208,12 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Register the caller as an Artist.
+        #[pallet::weight(T::WeightInfo::register(
+            T::MaxNameLen::get(),
+            T::MaxGenres::get(),
+            T::MaxAssets::get()
+        ))]
+        #[pallet::call_index(0)]
         pub fn register(
             origin: OriginFor<T>,
             main_name: BoundedVec<u8, T::MaxNameLen>,
@@ -246,6 +258,12 @@ pub mod pallet {
 
         /// Unregister the caller from being an artist,
         /// clearing associated artist data mapped to this account
+        #[pallet::weight(T::WeightInfo::unregister(
+            T::MaxNameLen::get(),
+            T::MaxGenres::get(),
+            T::MaxAssets::get()
+        ))]
+        #[pallet::call_index(1)]
         pub fn unregister(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let origin = ensure_signed(origin)?;
 
@@ -260,6 +278,11 @@ pub mod pallet {
         }
 
         /// Update the passed caller artist data field with the passed data.
+        #[pallet::weight({
+            let weight_fn = Pallet::<T>::get_weight_update_fn(&data);
+            weight_fn()
+        })]
+        #[pallet::call_index(2)]
         pub fn update(
             origin: OriginFor<T>,
             data: UpdatableData<ArtistAliasOf<T>>,
@@ -286,6 +309,68 @@ impl<T> Pallet<T>
 where
     T: frame_system::Config + Config,
 {
+    /// Returns a closure that computes the weight of an update operation based on the provided data.
+    ///
+    /// This function is part of Substrate's weight and benchmarking system for blockchain operations.
+    /// It determines the computational and storage resources required for different update operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A reference to `UpdatableData<ArtistAliasOf<T>>`, an enum representing the type of
+    ///   data to be updated. The generic `T` is typically a type associated with a specific blockchain
+    ///   implementation.
+    ///
+    /// # Returns
+    ///
+    /// A `Box<dyn FnOnce() -> Weight>` which is a boxed closure that can be called once to compute the
+    /// weight of the specified update operation. `Weight` is a metric used to measure the resource
+    /// consumption of the operation on the blockchain.
+    ///
+    /// # Implementation Details
+    ///
+    /// - The function uses a `match` expression to determine the type of the update operation from
+    ///   `UpdatableData`.
+    /// - For `Genres` and `Assets`, a sub-match on `UpdatableDataVec` discriminates whether items are
+    ///   being added, removed, or if the list is cleared.
+    /// - Each branch calls an appropriate method from the `WeightInfo` trait, which must be implemented
+    ///   by `T`. These methods provide weight estimations for different operations, such as
+    ///   `T::WeightInfo::update_add_genres(T::MaxGenres::get())` for adding genres.
+    /// - Closures are used to encapsulate the specific logic for each update operation, ensuring the
+    ///   returned function conforms to `FnOnce() -> Weight`.
+    ///
+    /// This approach allows dynamic determination of operation costs on the blockchain, adapting to
+    /// the current context and specific parameters of each update operation.
+    fn get_weight_update_fn(data: &UpdatableData<ArtistAliasOf<T>>) -> Box<dyn FnOnce() -> Weight> {
+        match data {
+            UpdatableData::Genres(x) => match x {
+                UpdatableDataVec::Add(_) => {
+                    Box::new(move || T::WeightInfo::update_add_genres(T::MaxGenres::get()))
+                }
+                UpdatableDataVec::Remove(_) => {
+                    Box::new(move || T::WeightInfo::update_remove_genres(T::MaxGenres::get()))
+                }
+                UpdatableDataVec::Clear => {
+                    Box::new(move || T::WeightInfo::update_clear_genres(T::MaxGenres::get()))
+                }
+            },
+            UpdatableData::Assets(x) => match x {
+                UpdatableDataVec::Add(_) => {
+                    Box::new(move || T::WeightInfo::update_add_assets(T::MaxAssets::get()))
+                }
+                UpdatableDataVec::Remove(_) => {
+                    Box::new(move || T::WeightInfo::update_remove_assets(T::MaxAssets::get()))
+                }
+                UpdatableDataVec::Clear => {
+                    Box::new(move || T::WeightInfo::update_clear_assets(T::MaxAssets::get()))
+                }
+            },
+            UpdatableData::Description(_) => Box::new(move || T::WeightInfo::update_description()),
+            UpdatableData::Alias(_) => Box::new(move || {
+                T::WeightInfo::update_alias(T::MaxNameLen::get(), T::MaxNameLen::get())
+            }),
+        }
+    }
+
     /// Hash a collection of raw assets while checking for non-unique assets.
     fn checked_hash_assets(
         raw_assets: BoundedVec<Vec<u8>, T::MaxAssets>,
