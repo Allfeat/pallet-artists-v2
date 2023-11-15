@@ -18,7 +18,7 @@
 use crate::{Config, Error};
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::dispatch::DispatchResultWithPostInfo;
-use frame_support::traits::Currency;
+use frame_support::traits::fungible::Inspect;
 use frame_support::BoundedVec;
 use frame_system::pallet_prelude::BlockNumberFor;
 use genres_registry::MusicGenre;
@@ -27,10 +27,11 @@ use sp_runtime::traits::Hash;
 use sp_runtime::RuntimeDebug;
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::prelude::Vec;
+use std::convert::Into;
 
 pub(super) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 pub(super) type BalanceOf<T> =
-    <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+    <<T as Config>::Currency as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 pub(super) type ArtistAliasOf<T> = BoundedVec<u8, <T as Config>::MaxNameLen>;
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -196,6 +197,7 @@ where
 
         if let Some(pos) = self.assets.iter().position(|&x| x == hash) {
             self.assets.remove(pos);
+
             Ok(().into())
         } else {
             Err(Error::<T>::NotFound.into())
@@ -210,4 +212,11 @@ where
             Err(Error::<T>::NotFound.into())
         }
     }
+
+    /* fn reserve_deposit_hash(&self, reserve_name: &str) -> Result<(), DispatchError> {
+        let hash_size = T::Hash::max_encoded_len();
+        let hash_cost = T::ByteDeposit::get().saturating_mul(hash_size.saturated_into());
+
+        T::Currency::reserve_named(Self::ASSETS_RESERVE, &self.owner, hash_cost)
+    }*/
 }

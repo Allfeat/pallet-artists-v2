@@ -26,11 +26,10 @@ use crate::types::ArtistAliasOf;
 use codec::alloc::string::ToString;
 use frame_benchmarking::v2::*;
 use frame_support::dispatch::RawOrigin;
-use frame_support::traits::Currency;
+use frame_support::traits::fungible::Mutate;
 use frame_system::Pallet as System;
 use genres_registry::ElectronicSubtype;
 use genres_registry::MusicGenre::Electronic;
-use sp_runtime::traits::Bounded;
 use sp_runtime::Saturating;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
@@ -114,7 +113,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         let name: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
         let alias: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
@@ -145,7 +144,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), n, g, a);
 
@@ -169,7 +168,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), n, 0, 0);
 
@@ -197,7 +196,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -224,7 +223,7 @@ mod benchmarks {
     fn update_remove_genres(n: Linear<1, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -253,7 +252,7 @@ mod benchmarks {
     fn update_clear_genres(n: Linear<0, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -278,7 +277,7 @@ mod benchmarks {
     fn update_description() -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, 0);
 
@@ -306,7 +305,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
@@ -333,7 +332,7 @@ mod benchmarks {
     fn update_remove_assets(n: Linear<1, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
@@ -361,7 +360,7 @@ mod benchmarks {
     fn update_clear_assets(n: Linear<0, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::make_free_balance_be(&caller, BalanceOf::<T>::max_value());
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 

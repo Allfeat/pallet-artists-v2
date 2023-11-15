@@ -97,7 +97,7 @@ use crate::types::{ArtistAliasOf, UpdatableData};
 use crate::types::{BalanceOf, UpdatableDataVec};
 use crate::Event::ArtistRegistered;
 use crate::Event::{ArtistUnregistered, ArtistUpdated};
-use frame_support::traits::ReservableCurrency;
+use frame_support::traits::fungible::{Inspect, Mutate, MutateHold};
 use sp_runtime::traits::Hash;
 use sp_runtime::SaturatedConversion;
 use sp_std::prelude::*;
@@ -109,6 +109,7 @@ pub use pallet::*;
 pub mod pallet {
     use super::*;
     use frame_support::pallet_prelude::*;
+    use frame_support::traits::tokens::Precision;
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
@@ -119,14 +120,26 @@ pub mod pallet {
         /// The overarching event type.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
+        #[cfg(not(feature = "runtime-benchmarks"))]
         /// The way to handle the storage deposit cost of Artist creation
-        type Currency: ReservableCurrency<Self::AccountId>;
+        type Currency: Inspect<Self::AccountId>
+            + MutateHold<Self::AccountId, Reason = Self::RuntimeHoldReason>;
+
+        #[cfg(feature = "runtime-benchmarks")]
+        /// The way to handle the storage deposit cost of Artist creation
+        /// Include Currency trait to have access to 'make_free_balance_be' function
+        type Currency: Mutate<Self::AccountId>
+            + Inspect<Self::AccountId>
+            + MutateHold<Self::AccountId, Reason = Self::RuntimeHoldReason>;
 
         /// The base deposit for registering as an artist on chain.
         type BaseDeposit: Get<BalanceOf<Self>>;
 
         /// The per-byte deposit for placing data hashes on chain.
         type ByteDeposit: Get<BalanceOf<Self>>;
+
+        /// The overarching hold reason.
+        type RuntimeHoldReason: From<HoldReason>;
 
         /// How many time a registered artist have to wait to unregister himself.
         #[pallet::constant]
@@ -150,6 +163,19 @@ pub mod pallet {
 
         /// Weight information for extrinsics in this pallet.
         type WeightInfo: WeightInfo;
+    }
+
+    /// A reason for the pallet contracts placing a hold on funds.
+    #[pallet::composite_enum]
+    pub enum HoldReason {
+        /// The Pallet has reserved it for registering the base Artist data.
+        ArtistRegistration,
+        /// The Pallet has reserved it for storage assets deposit.
+        ArtistAssets,
+        /// The Pallet has reserved it for storage description  deposit.
+        ArtistDescription,
+        /// The Pallet has reserved it for storage name/alias deposit.
+        ArtistNames,
     }
 
     #[pallet::storage]
@@ -233,7 +259,12 @@ pub mod pallet {
                 Error::<T>::NameUnavailable
             );
 
-            T::Currency::reserve(&origin, T::BaseDeposit::get())?;
+            // held amount for base artist data registration
+            T::Currency::hold(
+                &HoldReason::ArtistRegistration.into(),
+                &origin,
+                T::BaseDeposit::get(),
+            )?;
 
             let mut new_artist = Artist::<T>::new(
                 origin.clone(),
@@ -269,8 +300,14 @@ pub mod pallet {
 
             Self::can_unregister(&origin)?;
 
-            // return locked deposit
-            T::Currency::unreserve(&origin, T::BaseDeposit::get());
+            // return held deposit
+            T::Currency::release(
+                &HoldReason::ArtistRegistration.into(),
+                &origin,
+                T::BaseDeposit::get(),
+                Precision::BestEffort,
+            )?;
+
             ArtistOf::<T>::remove(origin.clone());
 
             Self::deposit_event(ArtistUnregistered { id: origin });

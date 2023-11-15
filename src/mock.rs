@@ -70,11 +70,11 @@ impl pallet_balances::Config for Test {
     type ExistentialDeposit = ConstU64<5>;
     type AccountStore = System;
     type ReserveIdentifier = [u8; 8];
-    type RuntimeHoldReason = ();
+    type RuntimeHoldReason = RuntimeHoldReason;
     type FreezeIdentifier = ();
     type MaxLocks = ();
     type MaxReserves = ConstU32<50>;
-    type MaxHolds = ();
+    type MaxHolds = ConstU32<5>;
     type MaxFreezes = ();
 }
 
@@ -88,6 +88,7 @@ impl Config for Test {
     type MaxGenres = ConstU32<5>;
     type MaxAssets = ConstU32<32>;
     type MaxContracts = ConstU32<2048>;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type WeightInfo = ();
 }
 
