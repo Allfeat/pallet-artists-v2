@@ -15,16 +15,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Config, Error};
+use crate::{Config, Error, HoldReason};
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::dispatch::DispatchResultWithPostInfo;
+use frame_support::dispatch::{DispatchErrorWithPostInfo, DispatchResultWithPostInfo};
+use frame_support::pallet_prelude::Get;
 use frame_support::traits::fungible::Inspect;
+use frame_support::traits::fungible::MutateHold;
+use frame_support::traits::tokens::fungible::hold::Inspect as InspectHold;
+use frame_support::traits::tokens::Precision;
 use frame_support::BoundedVec;
 use frame_system::pallet_prelude::BlockNumberFor;
 use genres_registry::MusicGenre;
 use scale_info::TypeInfo;
 use sp_runtime::traits::Hash;
-use sp_runtime::RuntimeDebug;
+use sp_runtime::{RuntimeDebug, SaturatedConversion, Saturating};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::prelude::Vec;
 use std::convert::Into;
@@ -100,23 +104,40 @@ where
         owner: AccountIdOf<T>,
         main_name: BoundedVec<u8, T::MaxNameLen>,
         alias: Option<ArtistAliasOf<T>>,
-        description: Option<T::Hash>,
-        assets: BoundedVec<T::Hash, T::MaxAssets>,
-        contracts: BoundedVec<AccountIdOf<T>, T::MaxContracts>,
-    ) -> Self {
+        genres: BoundedVec<MusicGenre, T::MaxGenres>,
+        description: Option<Vec<u8>>,
+        assets: BoundedVec<Vec<u8>, T::MaxAssets>,
+    ) -> Result<Self, DispatchErrorWithPostInfo> {
         let current_block = <frame_system::Pallet<T>>::block_number();
-        Artist {
+
+        let mut new_artist = Artist {
             owner,
             registered_at: current_block,
             verified_at: None,
-            main_name,
-            alias,
+            main_name: main_name.clone(),
+            alias: Default::default(),
             // need to set later with the checked fn
             genres: Default::default(),
-            description,
-            assets,
-            contracts,
-        }
+            description: Default::default(),
+            assets: Default::default(),
+            contracts: Default::default(),
+        };
+
+        let name_len: BalanceOf<T> = main_name.encoded_size().saturated_into();
+        T::Currency::hold(
+            &HoldReason::ArtistName.into(),
+            &new_artist.owner,
+            T::ByteDeposit::get().saturating_mul(name_len),
+        )?;
+
+        new_artist.set_alias(alias)?;
+        new_artist.set_checked_genres(genres)?;
+        new_artist.set_description(description)?;
+        assets
+            .iter()
+            .try_for_each(|asset| new_artist.add_checked_asset(asset).map(|_| ()))?;
+
+        Ok(new_artist)
     }
 
     /// Set the genres of the artist while verifying that there is not the same genre multiple times.
@@ -151,14 +172,14 @@ where
         field: UpdatableData<BoundedVec<u8, T::MaxNameLen>>,
     ) -> DispatchResultWithPostInfo {
         match field {
-            UpdatableData::Alias(x) => self.set_alias(x),
+            UpdatableData::Alias(x) => self.set_alias(x)?,
             UpdatableData::Genres(UpdatableDataVec::Add(x)) => return self.add_checked_genres(x),
             UpdatableData::Genres(UpdatableDataVec::Remove(x)) => return self.remove_genre(x),
             UpdatableData::Genres(UpdatableDataVec::Clear) => self.genres = Default::default(),
-            UpdatableData::Description(x) => self.set_description(x),
+            UpdatableData::Description(x) => self.set_description(x)?,
             UpdatableData::Assets(UpdatableDataVec::Add(x)) => return self.add_checked_asset(&x),
             UpdatableData::Assets(UpdatableDataVec::Remove(x)) => return self.remove_asset(&x),
-            UpdatableData::Assets(UpdatableDataVec::Clear) => self.assets = Default::default(),
+            UpdatableData::Assets(UpdatableDataVec::Clear) => self.clear_assets()?,
         }
 
         Ok(().into())
@@ -168,15 +189,53 @@ where
         self.verified_at.is_some()
     }
 
-    fn set_alias(&mut self, alias: Option<BoundedVec<u8, T::MaxNameLen>>) {
-        self.alias = alias
+    fn set_alias(
+        &mut self,
+        alias: Option<BoundedVec<u8, T::MaxNameLen>>,
+    ) -> Result<(), DispatchErrorWithPostInfo> {
+        let alias_len = alias.encoded_size();
+        let alias_cost = T::ByteDeposit::get().saturating_mul(alias_len.saturated_into());
+
+        let old_deposit =
+            T::Currency::balance_on_hold(&HoldReason::ArtistAlias.into(), &self.owner);
+
+        if alias_cost > old_deposit {
+            T::Currency::hold(
+                &HoldReason::ArtistAlias.into(),
+                &self.owner,
+                alias_cost - old_deposit,
+            )?;
+        }
+        if alias_cost < old_deposit {
+            T::Currency::release(
+                &HoldReason::ArtistAlias.into(),
+                &self.owner,
+                old_deposit - alias_cost,
+                Precision::Exact,
+            )?;
+        }
+
+        self.alias = alias;
+
+        Ok(())
     }
 
-    fn set_description(&mut self, raw_description: Option<Vec<u8>>) {
+    fn set_description(
+        &mut self,
+        raw_description: Option<Vec<u8>>,
+    ) -> Result<(), DispatchErrorWithPostInfo> {
+        // Clean any existent deposit
+        self.unreserve_deposit_hash(HoldReason::ArtistDescription)?;
+
         match raw_description {
-            Some(x) => self.description = Some(T::Hashing::hash(&x)),
+            Some(x) => {
+                self.reserve_deposit_hash(HoldReason::ArtistDescription)?;
+                self.description = Some(T::Hashing::hash(&x));
+            }
             None => self.description = None,
         }
+
+        Ok(())
     }
 
     fn add_checked_asset(&mut self, asset: &Vec<u8>) -> DispatchResultWithPostInfo {
@@ -185,6 +244,9 @@ where
         match self.assets.contains(&hash) {
             false => {
                 self.assets.try_push(hash).map_err(|_| Error::<T>::Full)?;
+
+                // hold storage deposit
+                self.reserve_deposit_hash(HoldReason::ArtistAssets)?;
 
                 Ok(().into())
             }
@@ -196,12 +258,30 @@ where
         let hash = T::Hashing::hash(asset);
 
         if let Some(pos) = self.assets.iter().position(|&x| x == hash) {
+            // refund storage deposit
+            self.unreserve_deposit_hash(HoldReason::ArtistAssets)?;
+
             self.assets.remove(pos);
 
             Ok(().into())
         } else {
             Err(Error::<T>::NotFound.into())
         }
+    }
+
+    fn clear_assets(&mut self) -> Result<(), DispatchErrorWithPostInfo> {
+        let actual_deposit =
+            T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &self.owner);
+        T::Currency::release(
+            &HoldReason::ArtistAssets.into(),
+            &self.owner,
+            actual_deposit,
+            Precision::BestEffort,
+        )?;
+
+        self.assets = Default::default();
+
+        Ok(())
     }
 
     fn remove_genre(&mut self, genre: MusicGenre) -> DispatchResultWithPostInfo {
@@ -213,10 +293,26 @@ where
         }
     }
 
-    /* fn reserve_deposit_hash(&self, reserve_name: &str) -> Result<(), DispatchError> {
+    fn reserve_deposit_hash(&self, reason: HoldReason) -> Result<(), DispatchErrorWithPostInfo> {
         let hash_size = T::Hash::max_encoded_len();
         let hash_cost = T::ByteDeposit::get().saturating_mul(hash_size.saturated_into());
 
-        T::Currency::reserve_named(Self::ASSETS_RESERVE, &self.owner, hash_cost)
-    }*/
+        T::Currency::hold(&reason.into(), &self.owner, hash_cost).map_err(|e| e.into())
+    }
+
+    fn unreserve_deposit_hash(
+        &self,
+        reason: HoldReason,
+    ) -> Result<BalanceOf<T>, DispatchErrorWithPostInfo> {
+        let hash_size = T::Hash::max_encoded_len();
+        let hash_cost = T::ByteDeposit::get().saturating_mul(hash_size.saturated_into());
+
+        T::Currency::release(
+            &reason.into(),
+            &self.owner,
+            hash_cost,
+            Precision::BestEffort,
+        )
+        .map_err(|e| e.into())
+    }
 }

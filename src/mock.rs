@@ -83,12 +83,12 @@ impl Config for Test {
     type Currency = Balances;
     type BaseDeposit = ConstU64<5>;
     type ByteDeposit = ConstU64<1>;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type UnregisterPeriod = ConstU32<10>;
     type MaxNameLen = ConstU32<64>;
     type MaxGenres = ConstU32<5>;
     type MaxAssets = ConstU32<32>;
     type MaxContracts = ConstU32<2048>;
-    type RuntimeHoldReason = RuntimeHoldReason;
     type WeightInfo = ();
 }
 
@@ -97,7 +97,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .unwrap();
     let balances = pallet_balances::GenesisConfig::<Test> {
-        balances: vec![(1, 100), (2, 100), (3, 100), (4, 100), (5, 100)],
+        balances: vec![(1, 500), (2, 500), (3, 500), (4, 500), (5, 500)],
     };
     balances.assimilate_storage(&mut t).unwrap();
     t.into()

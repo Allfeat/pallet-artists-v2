@@ -23,9 +23,11 @@ use super::*;
 use crate::mock::*;
 use crate::types::{ArtistAliasOf, UpdatableData};
 use crate::Error as ArtistsError;
+use codec::{Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::Get;
 use frame_support::{assert_noop, assert_ok};
 use genres_registry::ElectronicSubtype;
+use sp_runtime::Saturating;
 use sp_std::prelude::Vec;
 
 struct ArtistMock<T: Config> {
@@ -53,6 +55,31 @@ fn tester_artist<T: Config>() -> ArtistMock<T> {
     }
 }
 
+fn expected_artist_cost<T: Config>(artist: &ArtistMock<T>) -> BalanceOf<T> {
+    let hash_size = T::Hash::max_encoded_len();
+
+    let name_size = artist.main_name.encoded_size();
+    let alias_size = artist.alias.encoded_size();
+
+    let hash_cost = T::ByteDeposit::get().saturating_mul(hash_size.saturated_into());
+
+    let name_cost = T::ByteDeposit::get().saturating_mul(name_size.saturated_into());
+    let alias_cost = T::ByteDeposit::get().saturating_mul(alias_size.saturated_into());
+    let description_cost = match artist.description {
+        Some(_) => hash_cost,
+        None => 0u32.saturated_into(),
+    };
+    let assets_cost: BalanceOf<T> = artist.assets.iter().fold(0u32.saturated_into(), |acc, _| {
+        acc.saturating_add(hash_cost)
+    });
+
+    T::BaseDeposit::get()
+        .saturating_add(name_cost)
+        .saturating_add(alias_cost)
+        .saturating_add(description_cost)
+        .saturating_add(assets_cost)
+}
+
 #[test]
 fn artist_register_works() {
     new_test_ext().execute_with(|| {
@@ -72,7 +99,9 @@ fn artist_register_works() {
 
         // Verify register cost
         let new_balance = Balances::free_balance(&artist_id);
-        let expected_cost: u64 = <Test as Config>::BaseDeposit::get();
+
+        let expected_cost = expected_artist_cost(&artist);
+
         assert_eq!(new_balance, old_balance - expected_cost);
 
         // Can't register a second time if already registered
@@ -126,7 +155,8 @@ fn artist_unregister_works() {
 
         // Deposit has been returned
         let new_balance = Balances::free_balance(&artist_id);
-        let expected_cost: u64 = <Test as Config>::BaseDeposit::get();
+        let expected_cost = expected_artist_cost(&artist);
+
         assert_eq!(new_balance, old_balance + expected_cost);
     })
 }

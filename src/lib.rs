@@ -87,7 +87,6 @@ pub mod weights;
 
 use weights::WeightInfo;
 
-use frame_support::dispatch::DispatchErrorWithPostInfo;
 use frame_support::pallet_prelude::{DispatchResultWithPostInfo, Get, Weight};
 use frame_support::BoundedVec;
 use genres_registry::MusicGenre;
@@ -98,8 +97,10 @@ use crate::types::{BalanceOf, UpdatableDataVec};
 use crate::Event::ArtistRegistered;
 use crate::Event::{ArtistUnregistered, ArtistUpdated};
 use frame_support::traits::fungible::{Inspect, Mutate, MutateHold};
-use sp_runtime::traits::Hash;
+use frame_support::traits::tokens::fungible::hold::Inspect as InspectHold;
+use frame_support::traits::tokens::Precision;
 use sp_runtime::SaturatedConversion;
+
 use sp_std::prelude::*;
 
 pub use pallet::*;
@@ -109,7 +110,6 @@ pub use pallet::*;
 pub mod pallet {
     use super::*;
     use frame_support::pallet_prelude::*;
-    use frame_support::traits::tokens::Precision;
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
@@ -174,8 +174,10 @@ pub mod pallet {
         ArtistAssets,
         /// The Pallet has reserved it for storage description  deposit.
         ArtistDescription,
-        /// The Pallet has reserved it for storage name/alias deposit.
-        ArtistNames,
+        /// The Pallet has reserved it for storage main name deposit.
+        ArtistName,
+        /// The Pallet has reserved it for storage alias deposit.
+        ArtistAlias,
     }
 
     #[pallet::storage]
@@ -259,6 +261,15 @@ pub mod pallet {
                 Error::<T>::NameUnavailable
             );
 
+            let new_artist = Artist::<T>::new(
+                origin.clone(),
+                main_name.clone(),
+                alias,
+                genres,
+                description,
+                assets,
+            )?;
+
             // held amount for base artist data registration
             T::Currency::hold(
                 &HoldReason::ArtistRegistration.into(),
@@ -266,20 +277,8 @@ pub mod pallet {
                 T::BaseDeposit::get(),
             )?;
 
-            let mut new_artist = Artist::<T>::new(
-                origin.clone(),
-                main_name.clone(),
-                alias,
-                match description {
-                    Some(desc) => Some(T::Hashing::hash(&desc)),
-                    None => None,
-                },
-                Self::checked_hash_assets(assets)?,
-                Default::default(),
-            );
-            new_artist.set_checked_genres(genres)?;
-
             ArtistOf::insert(origin.clone(), new_artist);
+
             Self::deposit_event(ArtistRegistered {
                 id: origin,
                 name: main_name,
@@ -300,11 +299,35 @@ pub mod pallet {
 
             Self::can_unregister(&origin)?;
 
-            // return held deposit
+            // return all held deposits
             T::Currency::release(
                 &HoldReason::ArtistRegistration.into(),
                 &origin,
                 T::BaseDeposit::get(),
+                Precision::BestEffort,
+            )?;
+            T::Currency::release(
+                &HoldReason::ArtistAssets.into(),
+                &origin,
+                T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &origin),
+                Precision::BestEffort,
+            )?;
+            T::Currency::release(
+                &HoldReason::ArtistAlias.into(),
+                &origin,
+                T::Currency::balance_on_hold(&HoldReason::ArtistAlias.into(), &origin),
+                Precision::BestEffort,
+            )?;
+            T::Currency::release(
+                &HoldReason::ArtistDescription.into(),
+                &origin,
+                T::Currency::balance_on_hold(&HoldReason::ArtistDescription.into(), &origin),
+                Precision::BestEffort,
+            )?;
+            T::Currency::release(
+                &HoldReason::ArtistName.into(),
+                &origin,
+                T::Currency::balance_on_hold(&HoldReason::ArtistName.into(), &origin),
                 Precision::BestEffort,
             )?;
 
@@ -406,26 +429,6 @@ where
                 T::WeightInfo::update_alias(T::MaxNameLen::get(), T::MaxNameLen::get())
             }),
         }
-    }
-
-    /// Hash a collection of raw assets while checking for non-unique assets.
-    fn checked_hash_assets(
-        raw_assets: BoundedVec<Vec<u8>, T::MaxAssets>,
-    ) -> Result<BoundedVec<T::Hash, T::MaxAssets>, DispatchErrorWithPostInfo> {
-        let mut hashed: BoundedVec<T::Hash, T::MaxAssets> = Default::default();
-
-        raw_assets
-            .iter()
-            .try_for_each(|asset| -> Result<(), DispatchErrorWithPostInfo> {
-                let hash = T::Hashing::hash(asset);
-                if hashed.contains(&hash) {
-                    return Err(Error::<T>::NotUniqueAsset.into());
-                }
-                hashed.try_push(hash).expect("already bounded");
-                Ok(())
-            })?;
-
-        Ok(hashed)
     }
 
     /// Return if the actual account ID can unregister from being an Artist.
