@@ -31,7 +31,6 @@ use sp_runtime::traits::Hash;
 use sp_runtime::{RuntimeDebug, SaturatedConversion, Saturating};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::prelude::Vec;
-use std::convert::Into;
 
 pub(super) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 pub(super) type BalanceOf<T> =

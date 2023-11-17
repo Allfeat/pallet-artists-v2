@@ -96,10 +96,13 @@ use crate::types::{ArtistAliasOf, UpdatableData};
 use crate::types::{BalanceOf, UpdatableDataVec};
 use crate::Event::ArtistRegistered;
 use crate::Event::{ArtistUnregistered, ArtistUpdated};
-use frame_support::traits::fungible::{Inspect, Mutate, MutateHold};
+use frame_support::traits::fungible::{Inspect, MutateHold};
 use frame_support::traits::tokens::fungible::hold::Inspect as InspectHold;
 use frame_support::traits::tokens::Precision;
 use sp_runtime::SaturatedConversion;
+
+#[cfg(feature = "runtime-benchmarks")]
+use frame_support::traits::fungible::Mutate;
 
 use sp_std::prelude::*;
 
