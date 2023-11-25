@@ -102,7 +102,7 @@ fn register_test_artist<T: Config>(
 #[benchmarks]
 mod benchmarks {
     use super::*;
-    use crate::types::{UpdatableData, UpdatableDataVec};
+    use crate::types::{UpdatableAssets, UpdatableData, UpdatableGenres};
     use genres_registry::ClassicalSubtype;
 
     #[benchmark]
@@ -200,9 +200,9 @@ mod benchmarks {
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
-        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableDataVec::Add(
-            MusicGenre::Classical(Some(ClassicalSubtype::Symphony)),
-        ));
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(
+            UpdatableGenres::Add(MusicGenre::Classical(Some(ClassicalSubtype::Symphony)))
+        );
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
@@ -229,9 +229,9 @@ mod benchmarks {
 
         // Always remove what we are sure this is the first element so there is always something
         // to remove even with only one genre existing in the benchmarking artist.
-        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableDataVec::Remove(
-            Electronic(Some(ElectronicSubtype::House)),
-        ));
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(
+            UpdatableGenres::Remove(Electronic(Some(ElectronicSubtype::House)))
+        );
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
@@ -256,7 +256,7 @@ mod benchmarks {
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
-        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableDataVec::Clear);
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableGenres::Clear);
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
@@ -309,9 +309,8 @@ mod benchmarks {
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
-        let new_data = UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableDataVec::Add(
-            b"test asset".to_vec(),
-        ));
+        let new_data =
+            UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableAssets::Add(b"test asset".to_vec()));
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
@@ -339,7 +338,7 @@ mod benchmarks {
         // Always remove what we are sure this is the first element so there is always something
         // to remove even with only one genre existing in the benchmarking artist.
         let new_data =
-            UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableDataVec::Remove(b"asset0".to_vec()));
+            UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableAssets::Remove(b"asset0".to_vec()));
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
@@ -364,7 +363,7 @@ mod benchmarks {
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
-        let new_data = UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableDataVec::Clear);
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Assets(UpdatableAssets::Clear);
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());

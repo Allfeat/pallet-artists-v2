@@ -40,17 +40,24 @@ pub(super) type ArtistAliasOf<T> = BoundedVec<u8, <T as Config>::MaxNameLen>;
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub enum UpdatableData<ArtistAlias> {
     Alias(Option<ArtistAlias>),
-    Genres(UpdatableDataVec<MusicGenre>),
+    Genres(UpdatableGenres),
     Description(Option<Vec<u8>>),
-    Assets(UpdatableDataVec<Vec<u8>>),
+    Assets(UpdatableAssets),
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub enum UpdatableAssets {
+    Add(Vec<u8>),
+    /// lookup into the existing value if the content exist and try to remove it
+    Remove(Vec<u8>),
+    Clear,
 }
 
 #[derive(Encode, MaxEncodedLen, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-#[scale_info(skip_type_params(T))]
-pub enum UpdatableDataVec<T> {
-    Add(T),
+pub enum UpdatableGenres {
+    Add(MusicGenre),
     /// lookup into the existing value if the content exist and try to remove it
-    Remove(T),
+    Remove(MusicGenre),
     Clear,
 }
 
@@ -173,13 +180,13 @@ where
     ) -> DispatchResultWithPostInfo {
         match field {
             UpdatableData::Alias(x) => self.set_alias(x)?,
-            UpdatableData::Genres(UpdatableDataVec::Add(x)) => return self.add_checked_genres(x),
-            UpdatableData::Genres(UpdatableDataVec::Remove(x)) => return self.remove_genre(x),
-            UpdatableData::Genres(UpdatableDataVec::Clear) => self.genres = Default::default(),
+            UpdatableData::Genres(UpdatableGenres::Add(x)) => return self.add_checked_genres(x),
+            UpdatableData::Genres(UpdatableGenres::Remove(x)) => return self.remove_genre(x),
+            UpdatableData::Genres(UpdatableGenres::Clear) => self.genres = Default::default(),
             UpdatableData::Description(x) => self.set_description(x)?,
-            UpdatableData::Assets(UpdatableDataVec::Add(x)) => return self.add_checked_asset(&x),
-            UpdatableData::Assets(UpdatableDataVec::Remove(x)) => return self.remove_asset(&x),
-            UpdatableData::Assets(UpdatableDataVec::Clear) => self.clear_assets()?,
+            UpdatableData::Assets(UpdatableAssets::Add(x)) => return self.add_checked_asset(&x),
+            UpdatableData::Assets(UpdatableAssets::Remove(x)) => return self.remove_asset(&x),
+            UpdatableData::Assets(UpdatableAssets::Clear) => self.clear_assets()?,
         }
 
         Ok(().into())

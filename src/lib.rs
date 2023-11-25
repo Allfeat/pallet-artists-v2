@@ -92,8 +92,8 @@ use frame_support::BoundedVec;
 use genres_registry::MusicGenre;
 pub use types::Artist;
 
-use crate::types::{ArtistAliasOf, UpdatableData};
-use crate::types::{BalanceOf, UpdatableDataVec};
+use crate::types::BalanceOf;
+use crate::types::{ArtistAliasOf, UpdatableAssets, UpdatableData, UpdatableGenres};
 use crate::Event::ArtistRegistered;
 use crate::Event::{ArtistUnregistered, ArtistUpdated};
 use frame_support::traits::fungible::{Inspect, MutateHold};
@@ -406,31 +406,31 @@ where
     fn get_weight_update_fn(data: &UpdatableData<ArtistAliasOf<T>>) -> Box<dyn FnOnce() -> Weight> {
         match data {
             UpdatableData::Genres(x) => match x {
-                UpdatableDataVec::Add(_) => {
+                UpdatableGenres::Add(_) => {
                     Box::new(move || T::WeightInfo::update_add_genres(T::MaxGenres::get()))
                 }
-                UpdatableDataVec::Remove(_) => {
+                UpdatableGenres::Remove(_) => {
                     Box::new(move || T::WeightInfo::update_remove_genres(T::MaxGenres::get()))
                 }
-                UpdatableDataVec::Clear => {
+                UpdatableGenres::Clear => {
                     Box::new(move || T::WeightInfo::update_clear_genres(T::MaxGenres::get()))
                 }
             },
             UpdatableData::Assets(x) => match x {
-                UpdatableDataVec::Add(_) => {
+                UpdatableAssets::Add(_) => {
                     Box::new(move || T::WeightInfo::update_add_assets(T::MaxAssets::get()))
                 }
-                UpdatableDataVec::Remove(_) => {
+                UpdatableAssets::Remove(_) => {
                     Box::new(move || T::WeightInfo::update_remove_assets(T::MaxAssets::get()))
                 }
-                UpdatableDataVec::Clear => {
+                UpdatableAssets::Clear => {
                     Box::new(move || T::WeightInfo::update_clear_assets(T::MaxAssets::get()))
                 }
             },
             UpdatableData::Description(_) => Box::new(move || T::WeightInfo::update_description()),
-            UpdatableData::Alias(_) => Box::new(move || {
-                T::WeightInfo::update_alias(T::MaxNameLen::get(), T::MaxNameLen::get())
-            }),
+            UpdatableData::Alias(_) => Box::new(
+                move || T::WeightInfo::update_alias(T::MaxNameLen::get(), T::MaxNameLen::get())
+            ),
         }
     }
 
