@@ -46,6 +46,7 @@ pub enum UpdatableData<ArtistAlias> {
 }
 
 #[derive(Encode, MaxEncodedLen, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[scale_info(skip_type_params(T))]
 pub enum UpdatableDataVec<T> {
     Add(T),
     /// lookup into the existing value if the content exist and try to remove it
