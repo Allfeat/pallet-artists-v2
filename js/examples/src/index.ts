@@ -1,4 +1,7 @@
 // Import
+import '@allfeat/types/src/interfaces/augment-api';
+import '@allfeat/types/src/interfaces/augment-types';
+
 import { ApiPromise, WsProvider } from '@polkadot/api';
 
 const wsProvider = new WsProvider();
