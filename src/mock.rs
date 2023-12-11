@@ -21,6 +21,8 @@ use super::*;
 use crate as pallet_artists;
 use frame_support::traits::{ConstU32, ConstU64, Everything};
 use frame_support::weights::constants::RocksDbWeight;
+use frame_support::{parameter_types, PalletId};
+use frame_system::EnsureRoot;
 use sp_runtime::testing::H256;
 use sp_runtime::traits::{BlakeTwo256, IdentityLookup};
 use sp_runtime::BuildStorage;
@@ -78,12 +80,19 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ();
 }
 
+parameter_types! {
+    pub const ArtistsPalletId: PalletId = PalletId(*b"py/artst");
+}
+
 impl Config for Test {
+    type PalletId = ArtistsPalletId;
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type BaseDeposit = ConstU64<5>;
     type ByteDeposit = ConstU64<1>;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type RootOrigin = EnsureRoot<Self::AccountId>;
+    type Slash = ();
     type UnregisterPeriod = ConstU32<10>;
     type MaxNameLen = ConstU32<64>;
     type MaxGenres = ConstU32<5>;

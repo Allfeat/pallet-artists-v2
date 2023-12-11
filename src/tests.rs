@@ -27,6 +27,7 @@ use codec::{Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::Get;
 use frame_support::{assert_noop, assert_ok};
 use genres_registry::ElectronicSubtype;
+use sp_runtime::DispatchError::BadOrigin;
 use sp_runtime::Saturating;
 use sp_std::prelude::Vec;
 
@@ -116,6 +117,39 @@ fn artist_register_works() {
             ),
             ArtistsError::<Test>::AlreadyRegistered
         );
+    })
+}
+
+#[test]
+fn artist_force_unregister_works() {
+    new_test_ext().execute_with(|| {
+        let artist = tester_artist::<Test>();
+        let artist_id = 1u64;
+
+        let old_balance = Balances::free_balance(&artist_id);
+
+        assert_ok!(Artists::register(
+            RuntimeOrigin::signed(artist_id),
+            artist.main_name.clone(),
+            artist.alias.clone(),
+            artist.genres.clone(),
+            artist.description.clone(),
+            artist.assets.clone(),
+        ));
+
+        // Can't force unregister if not Root origin
+        assert_noop!(
+            Artists::force_unregister(RuntimeOrigin::signed(artist_id), artist_id),
+            BadOrigin
+        );
+
+        assert_ok!(Artists::force_unregister(RuntimeOrigin::root(), artist_id,));
+
+        // Deposit has been returned
+        let new_balance = Balances::free_balance(&artist_id);
+        let expected_cost = expected_artist_cost(&artist);
+
+        assert_eq!(new_balance, old_balance - expected_cost);
     })
 }
 

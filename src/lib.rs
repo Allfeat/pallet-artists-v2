@@ -94,15 +94,23 @@ pub use types::Artist;
 
 use crate::types::BalanceOf;
 use crate::types::{ArtistAliasOf, UpdatableAssets, UpdatableData, UpdatableGenres};
+use crate::Event::ArtistForceUnregistered;
 use crate::Event::ArtistRegistered;
 use crate::Event::{ArtistUnregistered, ArtistUpdated};
-use frame_support::traits::fungible::{Inspect, MutateHold};
+use frame_support::traits::fungible::Credit;
+use frame_support::traits::fungible::{BalancedHold, Inspect, MutateHold};
 use frame_support::traits::tokens::fungible::hold::Inspect as InspectHold;
 use frame_support::traits::tokens::Precision;
+use frame_support::traits::Imbalance;
+use frame_support::traits::OnUnbalanced;
+use frame_support::PalletId;
+use sp_runtime::traits::Zero;
 use sp_runtime::SaturatedConversion;
 
 #[cfg(feature = "runtime-benchmarks")]
 use frame_support::traits::fungible::Mutate;
+use frame_system::EnsureSignedBy;
+use sp_runtime::traits::AccountIdConversion;
 
 use sp_std::prelude::*;
 
@@ -119,21 +127,27 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + Sized {
+    pub trait Config: frame_system::Config {
+        /// The Artists pallet id, used for deriving its sovereign account ID.
+        #[pallet::constant]
+        type PalletId: Get<PalletId>;
+
         /// The overarching event type.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         /// The way to handle the storage deposit cost of Artist creation
         type Currency: Inspect<Self::AccountId>
-            + MutateHold<Self::AccountId, Reason = Self::RuntimeHoldReason>;
+            + MutateHold<Self::AccountId, Reason = Self::RuntimeHoldReason>
+            + BalancedHold<Self::AccountId>;
 
         #[cfg(feature = "runtime-benchmarks")]
         /// The way to handle the storage deposit cost of Artist creation
-        /// Include Currency trait to have access to 'make_free_balance_be' function
+        /// Include Currency trait to have access to NegativeImbalance
         type Currency: Mutate<Self::AccountId>
             + Inspect<Self::AccountId>
-            + MutateHold<Self::AccountId, Reason = Self::RuntimeHoldReason>;
+            + MutateHold<Self::AccountId, Reason = Self::RuntimeHoldReason>
+            + BalancedHold<Self::AccountId>;
 
         /// The base deposit for registering as an artist on chain.
         type BaseDeposit: Get<BalanceOf<Self>>;
@@ -143,6 +157,12 @@ pub mod pallet {
 
         /// The overarching hold reason.
         type RuntimeHoldReason: From<HoldReason>;
+
+        /// The Root Origin that allow force unregistering artists.
+        type RootOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
+        /// Handler for the unbalanced reduction when slashing an artists deposit.
+        type Slash: OnUnbalanced<Credit<Self::AccountId, Self::Currency>>;
 
         /// How many time a registered artist have to wait to unregister himself.
         #[pallet::constant]
@@ -183,6 +203,13 @@ pub mod pallet {
         ArtistAlias,
     }
 
+    #[pallet::type_value]
+    pub fn DefaultAddress<T: Config>() -> T::AccountId {
+        let id: T::AccountId = T::PalletId::get().into_account_truncating();
+        Address::<T>::set(id.clone());
+        id
+    }
+
     #[pallet::storage]
     #[pallet::getter(fn get_artist_by_id)]
     pub(super) type ArtistOf<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Artist<T>>;
@@ -191,6 +218,10 @@ pub mod pallet {
     #[pallet::getter(fn get_artist_by_name)]
     pub(super) type ArtistNameOf<T: Config> =
         StorageMap<_, Twox64Concat, BoundedVec<u8, T::MaxNameLen>, Artist<T>>;
+
+    /// Used to cache the account id of this pallet
+    #[pallet::storage]
+    pub type Address<T: Config> = StorageValue<_, T::AccountId, ValueQuery, DefaultAddress<T>>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -205,6 +236,9 @@ pub mod pallet {
 
         /// An Artist as been unregistered
         ArtistUnregistered { id: T::AccountId },
+
+        /// An Artist as been unregistered from the `T::RootOrigin`
+        ArtistForceUnregistered { id: T::AccountId },
 
         ArtistUpdated {
             /// The address of the updated artist.
@@ -290,49 +324,39 @@ pub mod pallet {
         }
 
         /// Unregister the caller from being an artist,
+        /// clearing associated artist data mapped to this account.
+        ///
+        /// Enforced by `T::RootOrigin`, ignoring `T::UnregisterPeriod` and slash held balance of the artist.
+        #[pallet::weight(0)]
+        #[pallet::call_index(1)]
+        pub fn force_unregister(
+            origin: OriginFor<T>,
+            id: T::AccountId,
+        ) -> DispatchResultWithPostInfo {
+            T::RootOrigin::ensure_origin(origin)?;
+
+            Self::slash_held_all(&id)?;
+
+            ArtistOf::<T>::remove(id.clone());
+
+            Self::deposit_event(ArtistForceUnregistered { id });
+            Ok(().into())
+        }
+
+        /// Unregister the caller from being an artist,
         /// clearing associated artist data mapped to this account
         #[pallet::weight(T::WeightInfo::unregister(
             T::MaxNameLen::get(),
             T::MaxGenres::get(),
             T::MaxAssets::get()
         ))]
-        #[pallet::call_index(1)]
+        #[pallet::call_index(2)]
         pub fn unregister(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let origin = ensure_signed(origin)?;
 
             Self::can_unregister(&origin)?;
 
-            // return all held deposits
-            T::Currency::release(
-                &HoldReason::ArtistRegistration.into(),
-                &origin,
-                T::BaseDeposit::get(),
-                Precision::BestEffort,
-            )?;
-            T::Currency::release(
-                &HoldReason::ArtistAssets.into(),
-                &origin,
-                T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &origin),
-                Precision::BestEffort,
-            )?;
-            T::Currency::release(
-                &HoldReason::ArtistAlias.into(),
-                &origin,
-                T::Currency::balance_on_hold(&HoldReason::ArtistAlias.into(), &origin),
-                Precision::BestEffort,
-            )?;
-            T::Currency::release(
-                &HoldReason::ArtistDescription.into(),
-                &origin,
-                T::Currency::balance_on_hold(&HoldReason::ArtistDescription.into(), &origin),
-                Precision::BestEffort,
-            )?;
-            T::Currency::release(
-                &HoldReason::ArtistName.into(),
-                &origin,
-                T::Currency::balance_on_hold(&HoldReason::ArtistName.into(), &origin),
-                Precision::BestEffort,
-            )?;
+            Self::release_held_all(&origin)?;
 
             ArtistOf::<T>::remove(origin.clone());
 
@@ -345,7 +369,7 @@ pub mod pallet {
             let weight_fn = Pallet::<T>::get_weight_update_fn(&data);
             weight_fn()
         })]
-        #[pallet::call_index(2)]
+        #[pallet::call_index(3)]
         pub fn update(
             origin: OriginFor<T>,
             data: UpdatableData<ArtistAliasOf<T>>,
@@ -372,6 +396,99 @@ impl<T> Pallet<T>
 where
     T: frame_system::Config + Config,
 {
+    /// Release the held deposit for all reasons handled by this pallet.
+    fn release_held_all(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
+        // return all held deposits
+        T::Currency::release(
+            &HoldReason::ArtistRegistration.into(),
+            &account_id,
+            T::BaseDeposit::get(),
+            Precision::BestEffort,
+        )?;
+        T::Currency::release(
+            &HoldReason::ArtistAssets.into(),
+            &account_id,
+            T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &account_id),
+            Precision::BestEffort,
+        )?;
+        T::Currency::release(
+            &HoldReason::ArtistAlias.into(),
+            &account_id,
+            T::Currency::balance_on_hold(&HoldReason::ArtistAlias.into(), &account_id),
+            Precision::BestEffort,
+        )?;
+        T::Currency::release(
+            &HoldReason::ArtistDescription.into(),
+            &account_id,
+            T::Currency::balance_on_hold(&HoldReason::ArtistDescription.into(), &account_id),
+            Precision::BestEffort,
+        )?;
+        T::Currency::release(
+            &HoldReason::ArtistName.into(),
+            &account_id,
+            T::Currency::balance_on_hold(&HoldReason::ArtistName.into(), &account_id),
+            Precision::BestEffort,
+        )?;
+        Ok(().into())
+    }
+
+    /// Slash the held deposit for all reasons handled by this pallet.
+    fn slash_held_all(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
+        // slash and handle slash for all held deposits
+        let imbalance = T::Currency::slash(
+            &HoldReason::ArtistRegistration.into(),
+            &account_id,
+            T::BaseDeposit::get(),
+        )
+        .0
+        .merge(
+            T::Currency::slash(
+                &HoldReason::ArtistAssets.into(),
+                &account_id,
+                T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &account_id),
+            )
+            .0,
+        )
+        .merge(
+            T::Currency::slash(
+                &HoldReason::ArtistAssets.into(),
+                &account_id,
+                T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &account_id),
+            )
+            .0,
+        )
+        .merge(
+            T::Currency::slash(
+                &HoldReason::ArtistAlias.into(),
+                &account_id,
+                T::Currency::balance_on_hold(&HoldReason::ArtistAlias.into(), &account_id),
+            )
+            .0,
+        )
+        .merge(
+            T::Currency::slash(
+                &HoldReason::ArtistDescription.into(),
+                &account_id,
+                T::Currency::balance_on_hold(&HoldReason::ArtistDescription.into(), &account_id),
+            )
+            .0,
+        )
+        .merge(
+            T::Currency::slash(
+                &HoldReason::ArtistName.into(),
+                &account_id,
+                T::Currency::balance_on_hold(&HoldReason::ArtistName.into(), &account_id),
+            )
+            .0,
+        );
+
+        if !imbalance.peek().is_zero() {
+            T::Slash::on_unbalanced(imbalance);
+        }
+
+        Ok(().into())
+    }
+
     /// Returns a closure that computes the weight of an update operation based on the provided data.
     ///
     /// This function is part of Substrate's weight and benchmarking system for blockchain operations.
@@ -428,9 +545,9 @@ where
                 }
             },
             UpdatableData::Description(_) => Box::new(move || T::WeightInfo::update_description()),
-            UpdatableData::Alias(_) => Box::new(
-                move || T::WeightInfo::update_alias(T::MaxNameLen::get(), T::MaxNameLen::get())
-            ),
+            UpdatableData::Alias(_) => Box::new(move || {
+                T::WeightInfo::update_alias(T::MaxNameLen::get(), T::MaxNameLen::get())
+            }),
         }
     }
 
@@ -459,3 +576,6 @@ where
         }
     }
 }
+
+pub type EnsureArtistsPallet<T> =
+    EnsureSignedBy<Address<T>, <T as frame_system::Config>::AccountId>;

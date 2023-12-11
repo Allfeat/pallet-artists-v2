@@ -137,6 +137,26 @@ mod benchmarks {
     }
 
     #[benchmark]
+    fn force_unregister(
+        n: Linear<1, { T::MaxNameLen::get() }>,
+        g: Linear<0, { T::MaxGenres::get() }>,
+        a: Linear<0, { T::MaxAssets::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        let caller: T::AccountId = whitelisted_caller();
+
+        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+
+        register_test_artist::<T>(caller.clone(), n, g, a);
+
+        #[extrinsic_call]
+        _(RawOrigin::Root, caller.clone());
+
+        assert_last_event::<T>(Event::ArtistForceUnregistered { id: caller }.into());
+
+        Ok(())
+    }
+
+    #[benchmark]
     fn unregister(
         n: Linear<1, { T::MaxNameLen::get() }>,
         g: Linear<0, { T::MaxGenres::get() }>,
@@ -200,9 +220,9 @@ mod benchmarks {
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
-        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(
-            UpdatableGenres::Add(MusicGenre::Classical(Some(ClassicalSubtype::Symphony)))
-        );
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableGenres::Add(
+            MusicGenre::Classical(Some(ClassicalSubtype::Symphony)),
+        ));
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
@@ -229,9 +249,9 @@ mod benchmarks {
 
         // Always remove what we are sure this is the first element so there is always something
         // to remove even with only one genre existing in the benchmarking artist.
-        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(
-            UpdatableGenres::Remove(Electronic(Some(ElectronicSubtype::House)))
-        );
+        let new_data = UpdatableData::<ArtistAliasOf<T>>::Genres(UpdatableGenres::Remove(
+            Electronic(Some(ElectronicSubtype::House)),
+        ));
 
         #[extrinsic_call]
         update(RawOrigin::Signed(caller.clone().into()), new_data.clone());
