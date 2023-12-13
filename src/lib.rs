@@ -31,13 +31,12 @@
 //! 1. **Artist Registration**: Users can register themselves as artists, providing details like their main
 //! name, an alias, music genres, a description, and related assets.
 //!
-//! 2. **Storage**: Artist data is securely stored on-chain. Artists can be retrieved either by their account
-//! ID or by their name.
+//! 2. **Storage**: Artist data is securely stored on-chain. Artists can be retrieved by their account
+//! ID.
 //!
 //! 3. **Asset Handling**: Artist assets undergo hashing to ensure data integrity.
 //!
-//! 4. **Error Management**: Several error cases are covered, like when an artist tries to register with an
-//! already taken name or attempts to unregister while verified.
+//! 4. **Error Management**: Several error cases are covered, like when an artist tries to unregister while verified.
 //!
 //! ### Configuration (`Config`)
 //!
@@ -214,11 +213,6 @@ pub mod pallet {
     #[pallet::getter(fn get_artist_by_id)]
     pub(super) type ArtistOf<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Artist<T>>;
 
-    #[pallet::storage]
-    #[pallet::getter(fn get_artist_by_name)]
-    pub(super) type ArtistNameOf<T: Config> =
-        StorageMap<_, Twox64Concat, BoundedVec<u8, T::MaxNameLen>, Artist<T>>;
-
     /// Used to cache the account id of this pallet
     #[pallet::storage]
     pub type Address<T: Config> = StorageValue<_, T::AccountId, ValueQuery, DefaultAddress<T>>;
@@ -292,10 +286,6 @@ pub mod pallet {
             ensure!(
                 !ArtistOf::<T>::contains_key(origin.clone()),
                 Error::<T>::AlreadyRegistered
-            );
-            ensure!(
-                !ArtistNameOf::<T>::contains_key(main_name.clone()),
-                Error::<T>::NameUnavailable
             );
 
             let new_artist = Artist::<T>::new(
