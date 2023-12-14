@@ -17,6 +17,7 @@
 
 use crate::{Config, Error, HoldReason};
 use codec::{Decode, Encode, MaxEncodedLen};
+use derive_getters::Getters;
 use frame_support::dispatch::{DispatchErrorWithPostInfo, DispatchResultWithPostInfo};
 use frame_support::pallet_prelude::Get;
 use frame_support::traits::fungible::Inspect;
@@ -62,7 +63,7 @@ pub enum UpdatableGenres {
 }
 
 /// How an Artist is designed to be stored on-chain.
-#[derive(Encode, MaxEncodedLen, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, MaxEncodedLen, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, Getters)]
 #[scale_info(skip_type_params(T))]
 pub struct Artist<T>
 where
