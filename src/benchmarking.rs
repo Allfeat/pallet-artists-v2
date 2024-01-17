@@ -32,6 +32,8 @@ use genres_registry::ElectronicSubtype;
 use genres_registry::MusicGenre::Electronic;
 use sp_runtime::Saturating;
 
+const MINIMUM_BALANCE: u128 = 1000000000000000000;
+
 fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
@@ -113,7 +115,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         let name: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
         let alias: ArtistAliasOf<T> = dumb_name_with_capacity::<T>(n);
@@ -144,7 +146,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), n, g, a);
 
@@ -164,7 +166,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), n, g, a);
 
@@ -188,7 +190,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), n, 0, 0);
 
@@ -216,7 +218,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -243,7 +245,7 @@ mod benchmarks {
     fn update_remove_genres(n: Linear<1, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -272,7 +274,7 @@ mod benchmarks {
     fn update_clear_genres(n: Linear<0, { T::MaxGenres::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, n, 0);
 
@@ -297,7 +299,7 @@ mod benchmarks {
     fn update_description() -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, 0);
 
@@ -325,7 +327,7 @@ mod benchmarks {
     ) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
@@ -351,7 +353,7 @@ mod benchmarks {
     fn update_remove_assets(n: Linear<1, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 
@@ -379,7 +381,7 @@ mod benchmarks {
     fn update_clear_assets(n: Linear<0, { T::MaxAssets::get() }>) -> Result<(), BenchmarkError> {
         let caller: T::AccountId = whitelisted_caller();
 
-        T::Currency::set_balance(&caller, 1000000000u32.saturated_into());
+        T::Currency::set_balance(&caller, (MINIMUM_BALANCE * 100000u128).saturated_into());
 
         register_test_artist::<T>(caller.clone(), 1, 0, n);
 

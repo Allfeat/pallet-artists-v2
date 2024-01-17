@@ -19,7 +19,7 @@
 
 use super::*;
 use crate as pallet_artists;
-use frame_support::traits::{ConstU32, ConstU64, Everything};
+use frame_support::traits::{ConstU128, ConstU32, ConstU64, Everything};
 use frame_support::weights::constants::RocksDbWeight;
 use frame_support::{parameter_types, PalletId};
 use frame_system::EnsureRoot;
@@ -55,7 +55,7 @@ impl frame_system::Config for Test {
     type BlockHashCount = ConstU64<250>;
     type Version = ();
     type PalletInfo = PalletInfo;
-    type AccountData = pallet_balances::AccountData<u64>;
+    type AccountData = pallet_balances::AccountData<u128>;
     type OnNewAccount = ();
     type OnKilledAccount = ();
     type SystemWeightInfo = ();
@@ -67,16 +67,16 @@ impl frame_system::Config for Test {
 impl pallet_balances::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
-    type Balance = u64;
+    type Balance = u128;
     type DustRemoval = ();
-    type ExistentialDeposit = ConstU64<5>;
+    type ExistentialDeposit = ConstU128<1>;
     type AccountStore = System;
     type ReserveIdentifier = [u8; 8];
     type RuntimeHoldReason = RuntimeHoldReason;
     type FreezeIdentifier = ();
     type MaxLocks = ();
-    type MaxReserves = ConstU32<50>;
-    type MaxHolds = ConstU32<5>;
+    type MaxReserves = ();
+    type MaxHolds = ConstU32<10>;
     type MaxFreezes = ();
 }
 
@@ -88,8 +88,8 @@ impl Config for Test {
     type PalletId = ArtistsPalletId;
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
-    type BaseDeposit = ConstU64<5>;
-    type ByteDeposit = ConstU64<1>;
+    type BaseDeposit = ConstU128<5>;
+    type ByteDeposit = ConstU128<1>;
     type RuntimeHoldReason = RuntimeHoldReason;
     type RootOrigin = EnsureRoot<Self::AccountId>;
     type Slash = ();

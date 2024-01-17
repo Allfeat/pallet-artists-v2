@@ -91,7 +91,7 @@ use frame_support::BoundedVec;
 use genres_registry::MusicGenre;
 pub use types::Artist;
 
-use crate::types::BalanceOf;
+use crate::types::{AccountIdOf, BalanceOf};
 use crate::types::{ArtistAliasOf, UpdatableAssets, UpdatableData, UpdatableGenres};
 use crate::Event::ArtistForceUnregistered;
 use crate::Event::ArtistRegistered;
@@ -106,8 +106,6 @@ use frame_support::PalletId;
 use sp_runtime::traits::Zero;
 use sp_runtime::SaturatedConversion;
 
-#[cfg(feature = "runtime-benchmarks")]
-use frame_support::traits::fungible::Mutate;
 use frame_system::EnsureSignedBy;
 use sp_runtime::traits::AccountIdConversion;
 
@@ -120,6 +118,7 @@ pub use pallet::*;
 pub mod pallet {
     use super::*;
     use frame_support::pallet_prelude::*;
+    use frame_support::traits::fungible::Mutate;
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
@@ -317,7 +316,11 @@ pub mod pallet {
         /// clearing associated artist data mapped to this account.
         ///
         /// Enforced by `T::RootOrigin`, ignoring `T::UnregisterPeriod` and slash held balance of the artist.
-        #[pallet::weight(0)]
+        #[pallet::weight(T::WeightInfo::force_unregister(
+            T::MaxNameLen::get(),
+            T::MaxGenres::get(),
+            T::MaxAssets::get()
+        ))]
         #[pallet::call_index(1)]
         pub fn force_unregister(
             origin: OriginFor<T>,
@@ -425,14 +428,14 @@ where
     /// Slash the held deposit for all reasons handled by this pallet.
     fn slash_held_all(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
         // slash and handle slash for all held deposits
-        let imbalance = T::Currency::slash(
+        let imbalance = <<T as pallet::Config>::Currency as BalancedHold<AccountIdOf<T>>>::slash(
             &HoldReason::ArtistRegistration.into(),
             &account_id,
             T::BaseDeposit::get(),
         )
         .0
         .merge(
-            T::Currency::slash(
+            <<T as pallet::Config>::Currency as BalancedHold<AccountIdOf<T>>>::slash(
                 &HoldReason::ArtistAssets.into(),
                 &account_id,
                 T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &account_id),
@@ -440,7 +443,7 @@ where
             .0,
         )
         .merge(
-            T::Currency::slash(
+            <<T as pallet::Config>::Currency as BalancedHold<AccountIdOf<T>>>::slash(
                 &HoldReason::ArtistAssets.into(),
                 &account_id,
                 T::Currency::balance_on_hold(&HoldReason::ArtistAssets.into(), &account_id),
@@ -448,7 +451,7 @@ where
             .0,
         )
         .merge(
-            T::Currency::slash(
+            <<T as pallet::Config>::Currency as BalancedHold<AccountIdOf<T>>>::slash(
                 &HoldReason::ArtistAlias.into(),
                 &account_id,
                 T::Currency::balance_on_hold(&HoldReason::ArtistAlias.into(), &account_id),
@@ -456,7 +459,7 @@ where
             .0,
         )
         .merge(
-            T::Currency::slash(
+            <<T as pallet::Config>::Currency as BalancedHold<AccountIdOf<T>>>::slash(
                 &HoldReason::ArtistDescription.into(),
                 &account_id,
                 T::Currency::balance_on_hold(&HoldReason::ArtistDescription.into(), &account_id),
@@ -464,7 +467,7 @@ where
             .0,
         )
         .merge(
-            T::Currency::slash(
+            <<T as pallet::Config>::Currency as BalancedHold<AccountIdOf<T>>>::slash(
                 &HoldReason::ArtistName.into(),
                 &account_id,
                 T::Currency::balance_on_hold(&HoldReason::ArtistName.into(), &account_id),
